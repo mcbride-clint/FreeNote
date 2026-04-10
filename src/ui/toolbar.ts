@@ -5,6 +5,7 @@ export interface ToolbarCallbacks {
   onMenuToggle: () => void
   onSearch: () => void
   onNewNote: () => void
+  onHelp: () => void
   onSignIn: () => void
   onSignOut: () => void
 }
@@ -31,6 +32,7 @@ export class Toolbar {
       </button>
       <div class="toolbar-spacer"></div>
       <button class="toolbar-btn new-btn" aria-label="New note">+ New</button>
+      <button class="toolbar-btn help-btn" aria-label="Help">?</button>
       <span class="sync-status" data-status="idle">Ready</span>
       <div class="user-area"></div>
     `
@@ -40,6 +42,7 @@ export class Toolbar {
     this.el.querySelector('.menu-toggle')?.addEventListener('click', () => callbacks.onMenuToggle())
     this.el.querySelector('.search-btn')?.addEventListener('click', () => callbacks.onSearch())
     this.el.querySelector('.new-btn')?.addEventListener('click', () => callbacks.onNewNote())
+    this.el.querySelector('.help-btn')?.addEventListener('click', () => callbacks.onHelp())
   }
 
   mount(parent: HTMLElement) {

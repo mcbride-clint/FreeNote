@@ -12,6 +12,7 @@ import { router } from './router'
 import { Sidebar } from './ui/sidebar'
 import { Toolbar } from './ui/toolbar'
 import { SearchModal } from './ui/search-modal'
+import { HelpModal } from './ui/help-modal'
 import { toast } from './ui/toast'
 import { generateId, slugify } from './utils/id-gen'
 
@@ -33,6 +34,7 @@ export class MarkFlowApp {
   private sidebar: Sidebar
   private toolbar: Toolbar
   private searchModal: SearchModal
+  private helpModal: HelpModal
   private state: AppState
 
   constructor(root: HTMLElement) {
@@ -55,10 +57,13 @@ export class MarkFlowApp {
     this.mainPane = document.createElement('main')
     this.mainPane.className = 'main-pane'
 
+    this.helpModal = new HelpModal()
+
     this.toolbar = new Toolbar({
       onMenuToggle: () => this.sidebar.toggle(),
       onSearch: () => this.searchModal.open(),
       onNewNote: () => this.createNewNote(),
+      onHelp: () => this.helpModal.open(),
       onSignIn: () => this.signIn(),
       onSignOut: () => this.signOut()
     })
@@ -86,6 +91,7 @@ export class MarkFlowApp {
     this.sidebar.mount(this.body)
     this.body.appendChild(this.mainPane)
     this.searchModal.mount(document.body)
+    this.helpModal.mount(document.body)
 
     this.state.sync.onStatusChange((status: SyncStatus, detail) =>
       this.toolbar.setSyncStatus(status, detail)
@@ -142,6 +148,13 @@ export class MarkFlowApp {
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault()
         this.state.currentEditor?.flushNow()
+      }
+      if (e.key === '?' && !mod && !isTyping(e)) {
+        e.preventDefault()
+        this.helpModal.open()
+      }
+      if (e.key === 'Escape' && this.helpModal.isOpen()) {
+        this.helpModal.close()
       }
     })
 
@@ -534,6 +547,11 @@ export class MarkFlowApp {
 
 function escapeAttr(text: string): string {
   return text.replace(/"/g, '&quot;').replace(/</g, '&lt;')
+}
+
+function isTyping(e: KeyboardEvent): boolean {
+  const el = e.target as HTMLElement
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable
 }
 
 function displayName(name: string): string {
