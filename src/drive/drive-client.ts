@@ -1,3 +1,5 @@
+import { idbGet, idbSet, idbDelete, STORE_META } from '../utils/idb'
+
 const BASE = 'https://www.googleapis.com'
 
 export class AuthError extends Error {
@@ -110,6 +112,24 @@ export class DriveClient {
   }
 
   async ensureFolder(name = 'MarkFlow'): Promise<string> {
+    // First try to get stored folder ID
+    const storedId = await idbGet<string>(STORE_META, 'folderId')
+    if (storedId) {
+      try {
+        // Verify the folder still exists and is accessible
+        const verify = await fetch(`${BASE}/drive/v3/files/${storedId}?fields=id,name`, {
+          headers: await this.authHeaders()
+        })
+        if (verify.ok) {
+          return storedId
+        }
+      } catch {
+        // Folder not accessible, remove stored ID
+        await idbDelete(STORE_META, 'folderId')
+      }
+    }
+
+    // Fallback: search for existing folder (requires broader scope)
     const q = `mimeType='application/vnd.google-apps.folder' and name='${name.replace(/'/g, "\\'")}' and trashed=false`
     const res = await fetch(
       `${BASE}/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
@@ -118,8 +138,13 @@ export class DriveClient {
     this.checkAuthResponse(res, 'ensureFolder')
     if (!res.ok) throw new Error(`ensureFolder lookup failed: ${res.status}`)
     const data = await res.json()
-    if (data.files?.length) return data.files[0].id
+    if (data.files?.length) {
+      const folderId = data.files[0].id
+      await idbSet(STORE_META, folderId, 'folderId')
+      return folderId
+    }
 
+    // Create new folder
     const create = await fetch(`${BASE}/drive/v3/files?fields=id`, {
       method: 'POST',
       headers: await this.authHeaders('application/json'),
@@ -128,6 +153,7 @@ export class DriveClient {
     this.checkAuthResponse(create, 'ensureFolder create')
     if (!create.ok) throw new Error(`ensureFolder create failed: ${create.status}`)
     const folder = await create.json()
+    await idbSet(STORE_META, folder.id, 'folderId')
     return folder.id
   }
 
