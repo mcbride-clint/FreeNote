@@ -45,3 +45,17 @@ export function extractExcerpt(content: string, length = 200): string {
     .trim()
   return plain.length > length ? plain.slice(0, length) + '…' : plain
 }
+
+export function extractTags(content: string): string[] {
+  const { data } = parseFrontMatter(content)
+  const raw = data.tags
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw.filter((t): t is string => typeof t === 'string')
+  if (typeof raw === 'string') return raw.split(',').map(s => s.trim()).filter(Boolean)
+  return []
+}
+
+export function extractFolder(content: string): string | undefined {
+  const { data } = parseFrontMatter(content)
+  return typeof data.folder === 'string' && data.folder.trim() ? data.folder.trim() : undefined
+}

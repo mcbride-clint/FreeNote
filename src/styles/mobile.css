@@ -7,6 +7,15 @@
   .toolbar-brand { font-size: 18px; }
   .search-btn .search-label { display: none; }
   .search-btn kbd { display: none; }
+  .search-btn {
+    min-width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+  }
+  .search-icon { flex-shrink: 0; }
 
   .sidebar {
     position: fixed;

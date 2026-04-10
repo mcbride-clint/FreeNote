@@ -1,11 +1,12 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 let pdfjsLibPromise: Promise<typeof import('pdfjs-dist')> | null = null
 
 async function loadPdfJs() {
   if (!pdfjsLibPromise) {
     pdfjsLibPromise = import('pdfjs-dist').then((lib) => {
-      lib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${lib.version}/pdf.worker.min.mjs`
+      lib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
       return lib
     })
   }
