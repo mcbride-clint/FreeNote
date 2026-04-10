@@ -129,19 +129,30 @@ export class DriveClient {
       }
     }
 
-    // Fallback: search for existing folder (requires broader scope)
-    const q = `mimeType='application/vnd.google-apps.folder' and name='${name.replace(/'/g, "\\'")}' and trashed=false`
-    const res = await fetch(
-      `${BASE}/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
-      { headers: await this.authHeaders() }
-    )
-    this.checkAuthResponse(res, 'ensureFolder')
-    if (!res.ok) throw new Error(`ensureFolder lookup failed: ${res.status}`)
-    const data = await res.json()
-    if (data.files?.length) {
-      const folderId = data.files[0].id
-      await idbSet(STORE_META, folderId, 'folderId')
-      return folderId
+    // Try to search for existing folder (may fail with 403 if insufficient scope)
+    try {
+      const q = `mimeType='application/vnd.google-apps.folder' and name='${name.replace(/'/g, "\\'")}' and trashed=false`
+      const res = await fetch(
+        `${BASE}/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
+        { headers: await this.authHeaders() }
+      )
+      if (res.status === 403) {
+        // Insufficient scope - assume folder doesn't exist and create new one
+        throw new Error('Insufficient scope for search')
+      }
+      this.checkAuthResponse(res, 'ensureFolder')
+      if (!res.ok) throw new Error(`ensureFolder lookup failed: ${res.status}`)
+      const data = await res.json()
+      if (data.files?.length) {
+        const folderId = data.files[0].id
+        await idbSet(STORE_META, folderId, 'folderId')
+        return folderId
+      }
+    } catch (err) {
+      // If search failed due to scope or other error, create new folder
+      if (!(err instanceof Error) || !err.message.includes('Insufficient scope')) {
+        console.warn('Folder search failed, creating new folder:', err instanceof Error ? err.message : String(err))
+      }
     }
 
     // Create new folder
