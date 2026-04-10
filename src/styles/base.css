@@ -22,6 +22,25 @@
   --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 
+[data-theme="light"] {
+  --bg-base: #f6f8fa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #eaeef2;
+  --bg-overlay: rgba(246, 248, 250, 0.88);
+  --text-primary: #1f2328;
+  --text-muted: #57606a;
+  --text-faint: #6e7781;
+  --accent: #9a6700;
+  --accent-dim: #7d5400;
+  --link: #0550ae;
+  --wiki-link: #6639ba;
+  --border: #d0d7de;
+  --border-strong: #8c959f;
+  --danger: #cf222e;
+  --success: #1a7f37;
+  --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
 * {
   box-sizing: border-box;
 }

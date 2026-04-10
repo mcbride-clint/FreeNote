@@ -6,6 +6,7 @@ export interface ToolbarCallbacks {
   onSearch: () => void
   onNewNote: () => void
   onHelp: () => void
+  onThemeToggle: () => void
   onSignIn: () => void
   onSignOut: () => void
 }
@@ -14,6 +15,7 @@ export class Toolbar {
   private el: HTMLElement
   private syncEl: HTMLSpanElement
   private userEl: HTMLDivElement
+  private themeBtn: HTMLButtonElement
 
   constructor(private callbacks: ToolbarCallbacks) {
     this.el = document.createElement('header')
@@ -33,20 +35,28 @@ export class Toolbar {
       <div class="toolbar-spacer"></div>
       <button class="toolbar-btn new-btn" aria-label="New note">+ New</button>
       <button class="toolbar-btn help-btn" aria-label="Help">?</button>
+      <button class="toolbar-btn theme-toggle-btn" aria-label="Toggle theme" title="Toggle light/dark mode">☀</button>
       <span class="sync-status" data-status="idle">Ready</span>
       <div class="user-area"></div>
     `
     this.syncEl = this.el.querySelector('.sync-status') as HTMLSpanElement
     this.userEl = this.el.querySelector('.user-area') as HTMLDivElement
+    this.themeBtn = this.el.querySelector('.theme-toggle-btn') as HTMLButtonElement
 
     this.el.querySelector('.menu-toggle')?.addEventListener('click', () => callbacks.onMenuToggle())
     this.el.querySelector('.search-btn')?.addEventListener('click', () => callbacks.onSearch())
     this.el.querySelector('.new-btn')?.addEventListener('click', () => callbacks.onNewNote())
     this.el.querySelector('.help-btn')?.addEventListener('click', () => callbacks.onHelp())
+    this.themeBtn.addEventListener('click', () => callbacks.onThemeToggle())
   }
 
   mount(parent: HTMLElement) {
     parent.appendChild(this.el)
+  }
+
+  setTheme(theme: 'dark' | 'light') {
+    this.themeBtn.textContent = theme === 'dark' ? '☀' : '☾'
+    this.themeBtn.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'
   }
 
   setSyncStatus(status: SyncStatus, detail?: string) {

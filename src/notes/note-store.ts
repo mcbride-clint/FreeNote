@@ -71,6 +71,19 @@ export class NoteStore extends EventTarget {
     return Array.from(this.notes.values()).map(n => stripMd(n.name))
   }
 
+  getBacklinks(noteId: string): NoteMeta[] {
+    const note = this.notes.get(noteId)
+    if (!note) return []
+    const targetName = stripMd(note.name).toLowerCase()
+    const result: NoteMeta[] = []
+    for (const other of this.notes.values()) {
+      if (other.id === noteId) continue
+      const links = extractWikiLinks(other.content).map(l => l.toLowerCase())
+      if (links.includes(targetName)) result.push(toMeta(other))
+    }
+    return result
+  }
+
   private emitChange() {
     this.dispatchEvent(new Event('change'))
   }
@@ -78,6 +91,14 @@ export class NoteStore extends EventTarget {
 
 function stripMd(name: string): string {
   return name.replace(/\.md$/i, '')
+}
+
+function extractWikiLinks(content: string): string[] {
+  const result: string[] = []
+  for (const match of content.matchAll(/\[\[([^\]]+)\]\]/g)) {
+    result.push(match[1].trim())
+  }
+  return result
 }
 
 function toMeta(note: CachedNote): NoteMeta {
