@@ -1,5 +1,5 @@
 import { AuthState, googleAuth } from './auth/google-auth'
-import { DriveClient } from './drive/drive-client'
+import { AuthError, DriveClient } from './drive/drive-client'
 import { CachedNote, getCached, putCached } from './drive/file-cache'
 import { SyncManager, SyncStatus } from './drive/sync-manager'
 import { noteStore } from './notes/note-store'
@@ -115,7 +115,11 @@ export class MarkFlowApp {
 
     if (this.state.auth) {
       await this.postSignInBoot()
-      router.start()
+      if (this.state.auth) {
+        router.start()
+      } else {
+        this.renderSignInPrompt()
+      }
     } else {
       this.renderSignInPrompt()
     }
@@ -171,7 +175,13 @@ export class MarkFlowApp {
         await this.state.sync.flushOfflineQueue()
       }
     } catch (err) {
-      toast.show(`Drive sync failed: ${(err as Error).message}`, 'error', 5000)
+      if (err instanceof AuthError) {
+        await googleAuth.signOut()
+        this.state.auth = null
+        this.toolbar.setUser(null)
+      } else {
+        toast.show(`Drive sync failed: ${(err as Error).message}`, 'error', 5000)
+      }
     }
   }
 

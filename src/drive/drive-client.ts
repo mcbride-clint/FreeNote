@@ -1,5 +1,12 @@
 const BASE = 'https://www.googleapis.com'
 
+export class AuthError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AuthError'
+  }
+}
+
 export interface DriveFile {
   id: string
   name: string
@@ -12,16 +19,23 @@ export class DriveClient {
 
   private async authHeaders(contentType?: string): Promise<Record<string, string>> {
     const token = await this.getToken()
-    if (!token) throw new Error('Not authenticated')
+    if (!token) throw new AuthError('Not authenticated')
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
     if (contentType) headers['Content-Type'] = contentType
     return headers
+  }
+
+  private checkAuthResponse(res: Response, context: string): void {
+    if (res.status === 401 || res.status === 403) {
+      throw new AuthError(`${context}: ${res.status}`)
+    }
   }
 
   async listNotes(folderId: string): Promise<DriveFile[]> {
     const q = `'${folderId}' in parents and (mimeType='text/markdown' or name contains '.md') and trashed=false`
     const url = `${BASE}/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,mimeType)&pageSize=1000&orderBy=modifiedTime desc`
     const res = await fetch(url, { headers: await this.authHeaders() })
+    this.checkAuthResponse(res, 'listNotes')
     if (!res.ok) throw new Error(`listNotes failed: ${res.status}`)
     const data = await res.json()
     return data.files ?? []
@@ -31,6 +45,7 @@ export class DriveClient {
     const res = await fetch(`${BASE}/drive/v3/files/${fileId}?alt=media`, {
       headers: await this.authHeaders()
     })
+    this.checkAuthResponse(res, 'readFile')
     if (!res.ok) throw new Error(`readFile failed: ${res.status}`)
     return res.text()
   }
@@ -39,6 +54,7 @@ export class DriveClient {
     const res = await fetch(`${BASE}/drive/v3/files/${fileId}?fields=id,name,modifiedTime,mimeType`, {
       headers: await this.authHeaders()
     })
+    this.checkAuthResponse(res, 'getMetadata')
     if (!res.ok) throw new Error(`getMetadata failed: ${res.status}`)
     return res.json()
   }
@@ -54,6 +70,7 @@ export class DriveClient {
         body: body.data
       }
     )
+    this.checkAuthResponse(res, 'createFile')
     if (!res.ok) throw new Error(`createFile failed: ${res.status}`)
     return res.json()
   }
@@ -67,6 +84,7 @@ export class DriveClient {
         body: content
       }
     )
+    this.checkAuthResponse(res, 'updateFile')
     if (!res.ok) throw new Error(`updateFile failed: ${res.status}`)
     return res.json()
   }
@@ -77,6 +95,7 @@ export class DriveClient {
       headers: await this.authHeaders('application/json'),
       body: JSON.stringify({ name: this.ensureMdExt(name) })
     })
+    this.checkAuthResponse(res, 'renameFile')
     if (!res.ok) throw new Error(`renameFile failed: ${res.status}`)
     return res.json()
   }
@@ -86,6 +105,7 @@ export class DriveClient {
       method: 'DELETE',
       headers: await this.authHeaders()
     })
+    this.checkAuthResponse(res, 'deleteFile')
     if (!res.ok && res.status !== 404) throw new Error(`deleteFile failed: ${res.status}`)
   }
 
@@ -95,6 +115,7 @@ export class DriveClient {
       `${BASE}/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
       { headers: await this.authHeaders() }
     )
+    this.checkAuthResponse(res, 'ensureFolder')
     if (!res.ok) throw new Error(`ensureFolder lookup failed: ${res.status}`)
     const data = await res.json()
     if (data.files?.length) return data.files[0].id
@@ -104,6 +125,7 @@ export class DriveClient {
       headers: await this.authHeaders('application/json'),
       body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder' })
     })
+    this.checkAuthResponse(create, 'ensureFolder create')
     if (!create.ok) throw new Error(`ensureFolder create failed: ${create.status}`)
     const folder = await create.json()
     return folder.id
