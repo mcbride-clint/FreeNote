@@ -176,9 +176,9 @@ export class MarkFlowApp {
       }
     } catch (err) {
       if (err instanceof AuthError) {
-        await googleAuth.signOut()
-        this.state.auth = null
-        this.toolbar.setUser(null)
+        //await googleAuth.signOut()
+        //this.state.auth = null
+        //this.toolbar.setUser(null)
       } else {
         toast.show(`Drive sync failed: ${(err as Error).message}`, 'error', 5000)
       }
