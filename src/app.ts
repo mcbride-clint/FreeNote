@@ -64,7 +64,10 @@ export class MarkFlowApp {
     })
 
     this.sidebar = new Sidebar({
-      onSelect: (id) => router.navigate(`/note/${id}`),
+      onSelect: (id) => {
+        router.navigate(`/note/${id}`)
+        if (window.innerWidth <= 768) this.sidebar.setOpen(false)
+      },
       onNew: () => this.createNewNote(),
       onDelete: (id) => this.deleteNote(id),
       onImport: (files) => this.importFiles(files)
@@ -490,14 +493,25 @@ export class MarkFlowApp {
         text = await ocrEngine.extractFromImage(file, (pct, status) => {
           handle.update(`${status}: ${file.name}`, pct)
         })
+      } else if (
+        file.name.endsWith('.md') ||
+        file.name.endsWith('.txt') ||
+        file.type === 'text/markdown' ||
+        file.type === 'text/plain'
+      ) {
+        text = await file.text()
       } else {
         throw new Error(`Unsupported file type: ${file.type || 'unknown'}`)
       }
 
       const date = new Date().toISOString().slice(0, 10)
       const baseName = file.name.replace(/\.[^.]+$/, '')
-      const noteName = `Imported - ${baseName} - ${date}.md`
-      const content = `# Imported: ${baseName}\n\n> Imported from \`${file.name}\` on ${date}\n\n${text.trim()}\n`
+      const noteName = `${baseName} - ${date}.md`
+      // Markdown files: preserve original content; others: wrap with header
+      const isMarkdown = file.name.endsWith('.md') || file.type === 'text/markdown'
+      const content = isMarkdown
+        ? text
+        : `# Imported: ${baseName}\n\n> Imported from \`${file.name}\` on ${date}\n\n${text.trim()}\n`
       const created = await this.state.drive.createFile(this.state.folderId!, noteName, content)
       const note: CachedNote = {
         id: created.id,

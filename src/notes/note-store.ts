@@ -1,5 +1,5 @@
 import { CachedNote, listCached, putCached, deleteCached, getCached } from '../drive/file-cache'
-import { extractExcerpt, extractTitle } from '../utils/markdown-utils'
+import { extractExcerpt, extractFolder, extractTags, extractTitle } from '../utils/markdown-utils'
 
 export interface NoteMeta {
   id: string
@@ -9,6 +9,8 @@ export interface NoteMeta {
   driveModifiedTime: string
   localModifiedAt: number
   dirty: boolean
+  tags: string[]
+  folder?: string
 }
 
 export class NoteStore extends EventTarget {
@@ -86,7 +88,9 @@ function toMeta(note: CachedNote): NoteMeta {
     excerpt: extractExcerpt(note.content),
     driveModifiedTime: note.driveModifiedTime,
     localModifiedAt: note.localModifiedAt,
-    dirty: note.dirty
+    dirty: note.dirty,
+    tags: extractTags(note.content),
+    folder: extractFolder(note.content),
   }
 }
 
