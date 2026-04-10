@@ -1,5 +1,3 @@
-import { idbGet, idbSet, idbDelete, STORE_META } from '../utils/idb'
-
 const BASE = 'https://www.googleapis.com'
 
 export class AuthError extends Error {
@@ -33,8 +31,11 @@ export class DriveClient {
     }
   }
 
-  async listNotes(folderId: string): Promise<DriveFile[]> {
-    const q = `'${folderId}' in parents and (mimeType='text/markdown' or name contains '.md') and trashed=false`
+  async listNotes(folderId?: string): Promise<DriveFile[]> {
+    let q = `(mimeType='text/markdown' or name contains '.md') and trashed=false`
+    if (folderId && folderId !== 'root') {
+      q = `'${folderId}' in parents and ${q}`
+    }
     const url = `${BASE}/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime,mimeType)&pageSize=1000&orderBy=modifiedTime desc`
     const res = await fetch(url, { headers: await this.authHeaders() })
     this.checkAuthResponse(res, 'listNotes')
@@ -61,8 +62,11 @@ export class DriveClient {
     return res.json()
   }
 
-  async createFile(folderId: string, name: string, content: string): Promise<DriveFile> {
-    const metadata = { name: this.ensureMdExt(name), mimeType: 'text/markdown', parents: [folderId] }
+  async createFile(folderId: string | null, name: string, content: string): Promise<DriveFile> {
+    const metadata: Record<string, unknown> = { name: this.ensureMdExt(name), mimeType: 'text/markdown' }
+    if (folderId && folderId !== 'root') {
+      metadata.parents = [folderId]
+    }
     const body = this.buildMultipart(metadata, content)
     const res = await fetch(
       `${BASE}/upload/drive/v3/files?uploadType=multipart&fields=id,name,modifiedTime,mimeType`,
@@ -111,61 +115,8 @@ export class DriveClient {
     if (!res.ok && res.status !== 404) throw new Error(`deleteFile failed: ${res.status}`)
   }
 
-  async ensureFolder(name = 'MarkFlow'): Promise<string> {
-    // First try to get stored folder ID
-    const storedId = await idbGet<string>(STORE_META, 'folderId')
-    if (storedId) {
-      try {
-        // Verify the folder still exists and is accessible
-        const verify = await fetch(`${BASE}/drive/v3/files/${storedId}?fields=id,name`, {
-          headers: await this.authHeaders()
-        })
-        if (verify.ok) {
-          return storedId
-        }
-      } catch {
-        // Folder not accessible, remove stored ID
-        await idbDelete(STORE_META, 'folderId')
-      }
-    }
-
-    // Try to search for existing folder (may fail with 403 if insufficient scope)
-    try {
-      const q = `mimeType='application/vnd.google-apps.folder' and name='${name.replace(/'/g, "\\'")}' and trashed=false`
-      const res = await fetch(
-        `${BASE}/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`,
-        { headers: await this.authHeaders() }
-      )
-      if (res.status === 403) {
-        // Insufficient scope - assume folder doesn't exist and create new one
-        throw new Error('Insufficient scope for search')
-      }
-      this.checkAuthResponse(res, 'ensureFolder')
-      if (!res.ok) throw new Error(`ensureFolder lookup failed: ${res.status}`)
-      const data = await res.json()
-      if (data.files?.length) {
-        const folderId = data.files[0].id
-        await idbSet(STORE_META, folderId, 'folderId')
-        return folderId
-      }
-    } catch (err) {
-      // If search failed due to scope or other error, create new folder
-      if (!(err instanceof Error) || !err.message.includes('Insufficient scope')) {
-        console.warn('Folder search failed, creating new folder:', err instanceof Error ? err.message : String(err))
-      }
-    }
-
-    // Create new folder
-    const create = await fetch(`${BASE}/drive/v3/files?fields=id`, {
-      method: 'POST',
-      headers: await this.authHeaders('application/json'),
-      body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder' })
-    })
-    this.checkAuthResponse(create, 'ensureFolder create')
-    if (!create.ok) throw new Error(`ensureFolder create failed: ${create.status}`)
-    const folder = await create.json()
-    await idbSet(STORE_META, folder.id, 'folderId')
-    return folder.id
+  async ensureFolder(): Promise<string> {
+    return 'root'
   }
 
   private ensureMdExt(name: string): string {

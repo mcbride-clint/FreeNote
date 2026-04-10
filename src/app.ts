@@ -168,7 +168,7 @@ export class MarkFlowApp {
 
   private async postSignInBoot() {
     try {
-      this.state.folderId = await this.state.drive.ensureFolder('MarkFlow')
+      this.state.folderId = await this.state.drive.ensureFolder()
       await this.syncFromDrive()
       searchIndex.buildFromStore(noteStore)
       if (navigator.onLine) {
@@ -422,7 +422,7 @@ export class MarkFlowApp {
     empty.innerHTML = `
       <h2>Welcome to MarkFlow</h2>
       <p>${noteCount === 0
-        ? 'Your notes live in a MarkFlow folder on your Google Drive. Create your first note to get started.'
+        ? 'Your notes live in the root of your Google Drive. Create your first note to get started.'
         : `You have ${noteCount} note${noteCount === 1 ? '' : 's'}. Open one from the sidebar or create a new one.`}</p>
       <button>+ Create a new note</button>
     `
@@ -436,7 +436,7 @@ export class MarkFlowApp {
     empty.className = 'empty-state'
     empty.innerHTML = `
       <h2>Sign in to get started</h2>
-      <p>MarkFlow stores your notes in a private folder on your Google Drive. Sign in with Google to continue.</p>
+      <p>MarkFlow stores your notes in the root of your Google Drive. Sign in with Google to continue.</p>
       <button>Sign in with Google</button>
     `
     empty.querySelector('button')?.addEventListener('click', () => this.signIn())
