@@ -13,6 +13,7 @@ import { Sidebar } from './ui/sidebar'
 import { Toolbar } from './ui/toolbar'
 import { SearchModal } from './ui/search-modal'
 import { HelpModal } from './ui/help-modal'
+import { LinkAutocomplete } from './ui/link-autocomplete'
 import { toast } from './ui/toast'
 import { generateId, slugify } from './utils/id-gen'
 
@@ -35,7 +36,10 @@ export class MarkFlowApp {
   private toolbar: Toolbar
   private searchModal: SearchModal
   private helpModal: HelpModal
+  private linkAutocomplete: LinkAutocomplete
   private state: AppState
+  private currentTheme: 'dark' | 'light' = 'dark'
+  private linkQueryFrom = 0
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -64,6 +68,7 @@ export class MarkFlowApp {
       onSearch: () => this.searchModal.open(),
       onNewNote: () => this.createNewNote(),
       onHelp: () => this.helpModal.open(),
+      onThemeToggle: () => this.toggleTheme(),
       onSignIn: () => this.signIn(),
       onSignOut: () => this.signOut()
     })
@@ -81,6 +86,10 @@ export class MarkFlowApp {
     this.searchModal = new SearchModal({
       onSelect: (id) => router.navigate(`/note/${id}`)
     })
+
+    this.linkAutocomplete = new LinkAutocomplete({
+      onInsert: (name) => this.insertWikiLink(name)
+    })
   }
 
   async mount() {
@@ -92,6 +101,11 @@ export class MarkFlowApp {
     this.body.appendChild(this.mainPane)
     this.searchModal.mount(document.body)
     this.helpModal.mount(document.body)
+    this.linkAutocomplete.mount(document.body)
+
+    // Apply saved theme
+    const savedTheme = (localStorage.getItem('theme') as 'dark' | 'light') ?? 'dark'
+    this.applyTheme(savedTheme)
 
     this.state.sync.onStatusChange((status: SyncStatus, detail) =>
       this.toolbar.setSyncStatus(status, detail)
@@ -132,6 +146,29 @@ export class MarkFlowApp {
     } else {
       this.renderSignInPrompt()
     }
+  }
+
+  private applyTheme(theme: 'dark' | 'light') {
+    this.currentTheme = theme
+    if (theme === 'light') {
+      document.documentElement.dataset.theme = 'light'
+    } else {
+      delete document.documentElement.dataset.theme
+    }
+    this.toolbar.setTheme(theme)
+    localStorage.setItem('theme', theme)
+  }
+
+  private toggleTheme() {
+    this.applyTheme(this.currentTheme === 'dark' ? 'light' : 'dark')
+  }
+
+  private insertWikiLink(name: string) {
+    const editor = this.state.currentEditor
+    if (!editor) return
+    const cursor = editor.getCursor()
+    editor.replaceRange(this.linkQueryFrom, cursor, `[[${name}]]`)
+    this.linkAutocomplete.hide()
   }
 
   private setupGlobalShortcuts() {
@@ -333,7 +370,9 @@ export class MarkFlowApp {
     previewEl.className = 'preview-pane'
     const previewContent = document.createElement('div')
     previewContent.className = 'rendered'
+    const backlinksEl = document.createElement('div')
     previewEl.appendChild(previewContent)
+    previewEl.appendChild(backlinksEl)
 
     const updatePanes = () => {
       editorEl.style.display = this.state.view === 'preview' ? 'none' : ''
@@ -348,11 +387,33 @@ export class MarkFlowApp {
     const editor = new NoteEditor({
       container: editorEl,
       initialContent: content,
-      onChange: (newContent) => this.handleNoteChange(id, newContent, previewContent)
+      onChange: (newContent) => this.handleNoteChange(id, newContent, previewContent, backlinksEl),
+      onWikiLinkQuery: (query, x, y, from) => {
+        this.linkQueryFrom = from
+        this.linkAutocomplete.showAt(x, y + 4, query)
+      },
+      onWikiLinkQueryClear: () => this.linkAutocomplete.hide(),
+      onKeyDown: (e) => this.linkAutocomplete.handleKey(e),
+      onImagePaste: (blob) => this.handleImagePaste(blob)
     })
     this.state.currentEditor = editor
 
     previewContent.innerHTML = renderMarkdown(content)
+    this.renderBacklinks(id, backlinksEl)
+
+    // Re-render backlinks when any note changes (another note may now link here)
+    const onStoreChange = () => {
+      if (this.state.currentNoteId === id) {
+        this.renderBacklinks(id, backlinksEl)
+      }
+    }
+    noteStore.addEventListener('change', onStoreChange)
+    // Clean up listener when note is replaced
+    const origDestroy = editor.destroy.bind(editor)
+    editor.destroy = () => {
+      noteStore.removeEventListener('change', onStoreChange)
+      origDestroy()
+    }
 
     // Title input handler
     const titleInput = header.querySelector('.title-input') as HTMLInputElement
@@ -390,7 +451,24 @@ export class MarkFlowApp {
     editor.focus()
   }
 
-  private handleNoteChange(id: string, content: string, previewContent: HTMLElement) {
+  private renderBacklinks(noteId: string, container: HTMLElement) {
+    const backlinks = noteStore.getBacklinks(noteId)
+    if (backlinks.length === 0) {
+      container.innerHTML = ''
+      return
+    }
+    const items = backlinks
+      .map(n => `<li><a href="#/note/${n.id}" class="wiki-link" data-wiki="${escapeAttr(n.title)}">${escapeHtml(n.title)}</a></li>`)
+      .join('')
+    container.innerHTML = `
+      <div class="backlinks-section">
+        <p class="backlinks-title">Referenced by</p>
+        <ul class="backlinks-list">${items}</ul>
+      </div>
+    `
+  }
+
+  private handleNoteChange(id: string, content: string, previewContent: HTMLElement, backlinksEl: HTMLElement) {
     const note = noteStore.get(id)
     if (!note) return
     const updated: CachedNote = {
@@ -402,6 +480,7 @@ export class MarkFlowApp {
     void noteStore.upsert(updated)
     searchIndex.update(id, note.name, content)
     previewContent.innerHTML = renderMarkdown(content)
+    this.renderBacklinks(id, backlinksEl)
     this.state.sync.scheduleWrite(id, content)
   }
 
@@ -416,6 +495,19 @@ export class MarkFlowApp {
       case 'link': editor.wrapSelection('[', '](url)'); break
       case 'wiki': editor.wrapSelection('[[', ']]'); break
       case 'divider': editor.insertAtCursor('\n\n---\n\n'); break
+    }
+  }
+
+  private async handleImagePaste(blob: Blob) {
+    const editor = this.state.currentEditor
+    if (!editor) return
+    try {
+      const dataUri = await blobToDataUri(blob)
+      const ext = blob.type.split('/')[1] || 'png'
+      editor.insertAtCursor(`![pasted image](${dataUri})`)
+      toast.show(`Image pasted (${ext.toUpperCase()}, ${formatBytes(blob.size)})`, 'success')
+    } catch (err) {
+      toast.show(`Image paste failed: ${(err as Error).message}`, 'error')
     }
   }
 
@@ -520,7 +612,6 @@ export class MarkFlowApp {
       const date = new Date().toISOString().slice(0, 10)
       const baseName = file.name.replace(/\.[^.]+$/, '')
       const noteName = `${baseName} - ${date}.md`
-      // Markdown files: preserve original content; others: wrap with header
       const isMarkdown = file.name.endsWith('.md') || file.type === 'text/markdown'
       const content = isMarkdown
         ? text
@@ -549,6 +640,10 @@ function escapeAttr(text: string): string {
   return text.replace(/"/g, '&quot;').replace(/</g, '&lt;')
 }
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement
   return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable
@@ -556,4 +651,19 @@ function isTyping(e: KeyboardEvent): boolean {
 
 function displayName(name: string): string {
   return name.replace(/\.md$/i, '')
+}
+
+function blobToDataUri(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
